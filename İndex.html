@@ -1,124 +1,220 @@
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>Cebimde Hava - Türkiye 81 İl</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<!-- Leaflet ve Heatmap kütüphaneleri -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+<title>Cebimde Hava</title>
 
 <style>
-body{margin:0;font-family:Arial;background:#0b1220;color:#fff}
-header{background:#081a2f;padding:15px;font-size:24px;font-weight:bold;text-align:center;color:#4fc3f7}
-#map{height:65vh;width:100%;}
-#panel{padding:10px;text-align:center;background:#111c2e;}
-#info{padding:15px;text-align:center;background:#111c2e;}
-.marker-icon {
-  width:40px; height:40px; border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  color:#fff; font-weight:bold; text-align:center;
-  border:2px solid #fff; cursor:pointer; box-shadow:0 0 5px #000;
+body{
+  margin:0;
+  font-family:Arial, sans-serif;
+  color:white;
+  text-align:center;
+  transition:background 0.5s ease;
+  overflow-x:hidden;
 }
-.marker-don{background:#1565c0;}
-.marker-kar{background:#fff;color:#000;}
-.marker-yagmur{background:#4fc3f7;color:#000;}
-#timeline{padding:10px;background:#111c2e;margin-top:10px;border-radius:8px;}
+.container{padding:20px;}
+
+select,button{
+  padding:10px;
+  margin:10px;
+  border-radius:8px;
+  border:none;
+  font-size:16px;
+}
+
+.card{
+  background:rgba(255,255,255,0.15);
+  backdrop-filter:blur(10px);
+  padding:20px;
+  border-radius:15px;
+  margin:20px auto;
+  max-width:400px;
+}
+
+.hourly{
+  display:flex;
+  overflow-x:auto;
+  gap:10px;
+}
+
+.hour{
+  min-width:90px;
+  background:rgba(255,255,255,0.2);
+  padding:10px;
+  border-radius:10px;
+}
+
+.warning{
+  background:#ff4d4d;
+  padding:10px;
+  border-radius:10px;
+  margin-top:10px;
+}
+
+body.clear { background: linear-gradient(135deg,#56ccf2,#2f80ed); }
+body.clouds { background: linear-gradient(135deg,#757f9a,#d7dde8); }
+body.rain { background: linear-gradient(135deg,#314755,#26a0da); }
+body.snow { background: linear-gradient(135deg,#e6dada,#274046); }
+
+.snowflake{
+  position:fixed;
+  top:-10px;
+  color:white;
+  font-size:18px;
+  animation:fall linear infinite;
+}
+
+@keyframes fall{
+  to{ transform:translateY(100vh); }
+}
 </style>
 </head>
-<body>
-<header>🌦️ Cebimde Hava - Türkiye 81 İl</header>
+<body class="clear">
 
-<div id="panel">
-<input id="search" placeholder="İl ara (örn: Erzurum)" style="width:90%;padding:10px;border-radius:8px;border:none;font-size:16px">
+<div class="container">
+<h1>🌤 Cebimde Hava</h1>
+
+<select id="city">
+<option value="Istanbul">İstanbul</option>
+<option value="Ankara">Ankara</option>
+<option value="Izmir">İzmir</option>
+<option value="Bursa">Bursa</option>
+<option value="Antalya">Antalya</option>
+<option value="Adana">Adana</option>
+<option value="Konya">Konya</option>
+<option value="Gaziantep">Gaziantep</option>
+<option value="Kayseri">Kayseri</option>
+<option value="Mersin">Mersin</option>
+<option value="Trabzon">Trabzon</option>
+<option value="Erzurum">Erzurum</option>
+<option value="Van">Van</option>
+<option value="Samsun">Samsun</option>
+<option value="Diyarbakir">Diyarbakır</option>
+<option value="Eskisehir">Eskişehir</option>
+<option value="Kocaeli">Kocaeli</option>
+<option value="Sakarya">Sakarya</option>
+<option value="Tekirdag">Tekirdağ</option>
+<option value="Malatya">Malatya</option>
+</select>
+
+<button onclick="getWeather()">Getir</button>
+
+<div class="card" id="current"></div>
+
+<div class="card">
+<h3>Saatlik Tahmin</h3>
+<div class="hourly" id="hourly"></div>
 </div>
 
-<div id="map"></div>
-<div id="info">Haritada bir ile dokun 👆</div>
+<div class="card" id="snow"></div>
+<div id="warnings"></div>
 
-<div id="timeline">
-<b>Soğuk / Isınma Tahmini:</b>
-<ul>
-<li>Ocak sonu: Sıcaklık artışı 🌤️</li>
-<li>Şubat başı: Soğuma ihtimali ❄️</li>
-</ul>
 </div>
 
 <script>
 const apiKey="4f0f2a01c4f7d40c476284eb0ef287a5";
 
-// Türkiye 81 ilin koordinatları
-const cities=[["Adana",37.0,35.3213],["Adıyaman",37.7648,38.2786],["Afyonkarahisar",38.7638,30.5408],
-["Ağrı",39.7191,43.0500],["Amasya",40.6539,35.8335],["Ankara",39.9334,32.8597],
-["Antalya",36.8969,30.7133],["Artvin",41.1828,41.8190],["Aydın",37.8497,27.8450],
-["Balıkesir",39.6484,27.8826],["Bilecik",40.1500,29.9833],["Bingöl",38.8850,40.4969],
-["Bitlis",38.4036,42.1106],["Bolu",40.5776,31.5788],["Burdur",37.7203,30.2886],
-["Bursa",40.1950,29.0600],["Çanakkale",40.1550,26.4142],["Çankırı",40.6013,33.6131],
-["Çorum",40.5500,34.9556],["Denizli",37.7765,29.0864],["Diyarbakır",37.9144,40.2306],
-["Edirne",41.6818,26.5623],["Elazığ",38.6741,39.2223],["Erzincan",39.7500,39.5000],
-["Erzurum",39.9043,41.2679],["Eskişehir",39.7767,30.5206],["Gaziantep",37.0662,37.3833],
-["Giresun",40.9128,38.3895],["Gümüşhane",40.4600,39.4800],["Hakkari",37.5744,43.7400],
-["Hatay",36.2061,36.1600],["Isparta",37.7648,30.5566],["Mersin",36.8121,34.6415],
-["İstanbul",41.0082,28.9784],["İzmir",38.4237,27.1428],["Kars",40.6011,43.0940],
-["Kastamonu",41.3784,33.7827],["Kayseri",38.7312,35.4787],["Kırıkkale",39.8468,33.5153],
-["Kırklareli",41.7333,27.2167],["Kırşehir",39.1458,34.1703],["Kocaeli",40.7766,29.9400],
-["Konya",37.8713,32.4849],["Kütahya",39.4167,29.9833],["Malatya",38.3556,38.3097],
-["Manisa",38.6191,27.4289],["Mardin",37.3120,40.7350],["Muğla",37.2150,28.3636],["Muş",38.9461,41.7531],
-["Nevşehir",38.6244,34.7126],["Niğde",37.9667,34.6833],["Ordu",40.9860,37.8794],["Osmaniye",37.0742,36.2381],
-["Rize",41.0201,40.5234],["Sakarya",40.6961,30.4350],["Samsun",41.2867,36.33],["Siirt",37.9333,41.9500],
-["Sinop",42.0269,35.1530],["Sivas",39.7477,37.0179],["Şanlıurfa",37.1670,38.7950],["Şırnak",37.4180,42.4910],
-["Tekirdağ",40.9833,27.5167],["Tokat",40.3131,36.5547],["Trabzon",41.0027,39.7178],["Tunceli",39.1083,39.5342],
-["Uşak",38.6824,29.4082],["Van",38.5010,43.4000],["Yozgat",39.8181,34.8147],["Zonguldak",41.4500,31.7833],
-["Aksaray",38.3687,34.0369],["Bayburt",40.2550,40.2244],["Karaman",37.1814,33.2154],["Batman",37.8872,41.1320],
-["Bartın",41.6350,32.3372],["Ardahan",41.1083,42.7022],["Iğdır",39.8780,44.0040],["Yalova",40.6500,29.2667],
-["Karabük",41.2053,32.6200],["Kilis",36.7167,37.1167],["Düzce",40.8433,31.1569]];
+function getWeather(){
+const city=document.getElementById("city").value;
 
-const map = L.map('map').setView([39.0,35.0],5);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
+fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city},TR&units=metric&lang=tr&appid=${apiKey}`)
+.then(res=>res.json())
+.then(data=>{
 
-// İl arama
-document.getElementById("search").addEventListener("input", e=>{
- const val = e.target.value.toLowerCase();
- const found = cities.find(c=>c[0].toLowerCase().includes(val));
- if(found) map.setView([found[1],found[2]],8);
+const now=data.list[0];
+const weatherType=now.weather[0].main.toLowerCase();
+
+setBackground(weatherType);
+
+document.getElementById("current").innerHTML=`
+<h2>${data.city.name}</h2>
+<p>🌡️ ${now.main.temp}°C</p>
+<p>☁️ ${now.weather[0].description}</p>
+<p>💧 Nem: ${now.main.humidity}%</p>
+<p>💨 Rüzgar: ${(now.wind.speed*3.6).toFixed(1)} km/sa</p>
+`;
+
+let hourlyHTML="";
+let totalSnow=0;
+let warningHTML="";
+
+for(let i=0;i<8;i++){
+const item=data.list[i];
+const hour=item.dt_txt.split(" ")[1].slice(0,5);
+
+hourlyHTML+=`
+<div class="hour">
+<div>${hour}</div>
+<div>${item.main.temp}°C</div>
+</div>
+`;
+
+if(item.snow && item.snow["3h"]){
+totalSnow+=item.snow["3h"];
+}
+
+if(item.main.temp<=0){
+warningHTML=`<div class="warning">⚠️ Don ve buzlanma riski!</div>`;
+}
+}
+
+document.getElementById("hourly").innerHTML=hourlyHTML;
+
+document.getElementById("snow").innerHTML=
+totalSnow>0?
+`<h3>❄️ Tahmini Kar Birikimi: ${totalSnow} mm</h3>`:
+`<h3>Kar beklenmiyor</h3>`;
+
+document.getElementById("warnings").innerHTML=warningHTML;
+
+if(totalSnow>0 || now.main.temp<=0){
+if(Notification.permission==="granted"){
+new Notification("Cebimde Hava Uyarı",{body:"Kar veya don riski var!"});
+}else{
+Notification.requestPermission();
+}
+}
+
+if(totalSnow>0){
+startSnow();
+}else{
+stopSnow();
+}
+
 });
+}
 
-let heatPoints = [];
+function setBackground(type){
+document.body.className="";
+if(type.includes("clear")) document.body.classList.add("clear");
+else if(type.includes("cloud")) document.body.classList.add("clouds");
+else if(type.includes("rain")) document.body.classList.add("rain");
+else if(type.includes("snow")) document.body.classList.add("snow");
+}
 
-// Tüm iller için marker ve popup
-cities.forEach(c=>{
- fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${c[1]}&lon=${c[2]}&units=metric&lang=tr&appid=${apiKey}`)
- .then(res=>res.json())
- .then(data=>{
-   let weather = data.weather[0].main;
-   let temp = data.main.temp;
-   let desc = data.weather[0].description;
-   let humidity = data.main.humidity;
-   let wind = data.wind.speed;
+let snowInterval;
 
-   let colorClass="marker-don";
-   if(weather.includes("Snow")) colorClass="marker-kar";
-   else if(weather.includes("Rain")) colorClass="marker-yagmur";
+function startSnow(){
+stopSnow();
+snowInterval=setInterval(()=>{
+const snow=document.createElement("div");
+snow.classList.add("snowflake");
+snow.innerHTML="❄";
+snow.style.left=Math.random()*window.innerWidth+"px";
+snow.style.animationDuration=(3+Math.random()*5)+"s";
+document.body.appendChild(snow);
+setTimeout(()=>snow.remove(),8000);
+},200);
+}
 
-   const myIcon = L.divIcon({
-     className:'marker-icon '+colorClass,
-     html:`${Math.round(temp)}°C`,
-     iconSize:[40,40],
-     popupAnchor:[0,-20]
-   });
-
-   const marker = L.marker([c[1],c[2]],{icon:myIcon}).addTo(map);
-   marker.bindPopup(`<b>${c[0]}</b><br>Sıcaklık: ${temp}°C<br>Nem: ${humidity}%<br>Rüzgar: ${wind} m/s<br>${desc}`);
-   marker.on('click',()=>{document.getElementById("info").innerHTML=`<b>${c[0]}</b>: ${temp}°C, ${humidity}%, Rüzgar ${wind} m/s, ${desc}`});
-
-   heatPoints.push([c[1],c[2],temp]);
-   if(heatPoints.length === cities.length){
-       L.heatLayer(heatPoints, {radius: 25, blur: 15, maxZoom: 17}).addTo(map);
-   }
- });
-});
+function stopSnow(){
+clearInterval(snowInterval);
+document.querySelectorAll(".snowflake").forEach(s=>s.remove());
+}
 </script>
+
 </body>
 </html>
